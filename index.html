@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SearchHub">
+<title>SearchHub リサーチ</title>
+<link rel="apple-touch-icon" href="https://i.ibb.co/zHBtVV9T/Chat-GPT-Image-2026-7-26-22-20-33.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Meiryo", sans-serif;
+    margin: 0; padding: 0; background: #f7fafc; color: #333;
+    padding-bottom: env(safe-area-inset-bottom); min-height: 100vh; overflow-x: hidden;
+  }
+  .header-wrapper { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 3px solid #1a365d; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand img { width: 30px; height: 30px; border-radius: 7px; }
+  .brand .name { font-size: 17px; font-weight: 900; color: #1a365d; letter-spacing: .02em; line-height: 1.1; }
+  .brand .sub { font-size: 9px; color: #a0aec0; font-weight: 700; letter-spacing: .08em; }
+  .gear { background: none; border: none; color: #4a5568; font-size: 19px; cursor: pointer; padding: 6px; }
+
+  .wrap { max-width: 640px; margin: 0 auto; padding: 12px; }
+  .card { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .badge { padding: 2px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; }
+  .calc-box { background: #333; color: #fff; padding: 16px; border-radius: 12px; font-size: 14px; font-weight: bold; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1); }
+  .calc-row { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .calc-row input { width: 130px; padding: 8px; border-radius: 6px; border: none; text-align: right; font-size: 15px; font-weight: bold; }
+  .register-btn { background: #243c5a; color: #fff; border: none; width: 100%; padding: 12px; border-radius: 12px; font-weight: bold; font-size: 14px; display: flex; justify-content: center; align-items: center; gap: 8px; box-shadow: 0 3px 6px rgba(0,0,0,.2); cursor: pointer; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .btn-link { display: flex; justify-content: center; align-items: center; color: #fff; text-decoration: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; }
+  .loading-spinner { text-align: center; padding: 40px; font-size: 13px; color: #2b6cb0; font-weight: bold; }
+
+  .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  .searchbar input { flex: 1; min-width: 0; padding: 12px; border: 1px solid #cbd5e0; border-radius: 10px; font-size: 15px; }
+  .searchbar button { border: none; border-radius: 10px; font-weight: bold; font-size: 15px; cursor: pointer; }
+  .btn-cam { background: #4a5568; color: #fff; width: 48px; }
+  .btn-go { background: #07A27B; color: #fff; padding: 0 20px; }
+
+  .remain { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #718096; margin: 0 2px 10px; }
+  .remain b { color: #1a365d; font-size: 13px; }
+  .remain a { color: #2b6cb0; font-weight: bold; text-decoration: none; }
+
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 999; align-items: center; justify-content: center; padding: 18px; }
+  .modal-content { background: #fff; border-radius: 14px; padding: 20px; width: 100%; max-width: 380px; max-height: 88vh; overflow-y: auto; }
+  .modal-content h3 { margin: 0 0 12px; font-size: 16px; color: #1a365d; }
+  .modal-content label { display: block; font-size: 12px; font-weight: bold; color: #4a5568; margin: 10px 0 4px; }
+  .modal-content input { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 14px; }
+  .modal-btns { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-btns button { flex: 1; padding: 11px; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; }
+  .b-gray { background: #e2e8f0; color: #4a5568; }
+  .b-navy { background: #1a365d; color: #fff; }
+  .b-gold { background: #C9962B; color: #fff; }
+
+  .upsell-lead { font-size: 14px; line-height: 1.8; color: #1a365d; font-weight: bold; margin: 0 0 10px; }
+  .upsell-body { font-size: 13px; line-height: 1.85; color: #4a5568; margin: 0 0 6px; }
+  .upsell-price { background: #FBF3E2; border: 1px solid #EFDCB4; border-radius: 10px; padding: 12px; text-align: center; margin: 14px 0 4px; }
+  .upsell-price b { font-size: 20px; color: #8A6510; }
+  .upsell-price span { display: block; font-size: 11px; color: #975a16; }
+
+  #scannerArea { display: none; position: relative; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+  #scannerVideo video, #scannerVideo canvas { width: 100% !important; height: auto !important; }
+  #scannerStatus { color: #fff; font-size: 12px; text-align: center; padding: 8px; }
+  .hint { font-size: 11px; color: #718096; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<div class="header-wrapper">
+  <div class="header">
+    <div class="brand">
+      <img src="https://i.ibb.co/zHBtVV9T/Chat-GPT-Image-2026-7-26-22-20-33.png" alt="">
+      <div>
+        <div class="name">SearchHub</div>
+        <div class="sub">RESEARCH</div>
+      </div>
+    </div>
+    <button class="gear" onclick="openConfig()"><i class="fas fa-cog"></i></button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="searchbar">
+    <input type="text" id="kw" placeholder="ASIN・JAN・型番を入力..." onkeydown="if(event.key==='Enter')runResearch()">
+    <button class="btn-cam" onclick="startScan()"><i class="fas fa-camera"></i></button>
+    <button class="btn-go" onclick="runResearch()">解析</button>
+  </div>
+
+  <div id="scannerArea">
+    <div id="scannerVideo"></div>
+    <div id="scannerStatus">カメラ初期化中...</div>
+    <div style="text-align:center; padding:0 0 10px;"><button onclick="stopScan()" style="background:#e53e3e; color:#fff; border:none; padding:7px 18px; border-radius:8px; font-weight:bold; cursor:pointer;">閉じる</button></div>
+  </div>
+
+  <div class="remain" id="remainBar" style="display:none;">
+    <span>今日あと <b id="remainNum">–</b> 回</span>
+    <a href="https://searchhubpro.github.io/searchhubnext-LP/" target="_blank">回数を気にせず使う →</a>
+  </div>
+
+  <div id="result"></div>
+  <div id="historyArea"></div>
+
+</div>
+
+<!-- 設定 -->
+<div class="modal" id="configModal">
+  <div class="modal-content">
+    <h3>⚙️ 設定</h3>
+    <label style="color:#d9534f;">Keepa APIキー（必須）</label>
+    <input type="text" id="cfgKeepa" placeholder="あなたのKeepa APIキー">
+    <p class="hint" style="margin-top:10px;">
+      Keepaの有料プランに入っていれば、Keepaのサイトの Data → API から取得できます。<br>
+      入力したキーは<b>この端末に保存されます。</b>解析のときだけサーバーを通ってKeepaへ送られ、<b>こちらには保存されません。</b>
+    </p>
+    <div class="modal-btns">
+      <button class="b-gray" onclick="closeConfig()">閉じる</button>
+      <button class="b-navy" onclick="saveConfig()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 案内 -->
+<div class="modal" id="upsellModal">
+  <div class="modal-content">
+    <h3 id="upTitle">SearchHub NEXT</h3>
+    <p class="upsell-lead" id="upLead"></p>
+    <p class="upsell-body" id="upBody"></p>
+    <div class="upsell-price">
+      <b>月 980円 〜</b>
+      <span>調べた商品が、そのまま帳簿になります</span>
+    </div>
+    <div class="modal-btns">
+      <button class="b-gray" onclick="closeUpsell()">あとで</button>
+      <button class="b-gold" onclick="goLp()">くわしく見る</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =========================================================
+// 無料版 SearchHub リサーチ
+//   ・ライセンス不要。Keepaキーだけで動く。
+//   ・Keepaへの問い合わせは free-research 関数を通す。
+//   ・1日20回まで。
+// =========================================================
+const FREE_API = "https://ihsjwsdwjuapfdhtocmq.supabase.co/functions/v1/free-research";
+const LP_URL   = "https://searchhubpro.github.io/searchhubnext-LP/";
+
+const Store = {
+  get(k, d) { try { return localStorage.getItem(k) === null ? d : localStorage.getItem(k); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+
+// ---------- 設定 ----------
+function openConfig() {
+  document.getElementById("cfgKeepa").value = Store.get("shf_keepa", "");
+  document.getElementById("configModal").style.display = "flex";
+}
+function closeConfig() { document.getElementById("configModal").style.display = "none"; }
+function saveConfig() {
+  Store.set("shf_keepa", document.getElementById("cfgKeepa").value.trim());
+  closeConfig();
+  alert("保存しました");
+}
+
+// ---------- 案内 ----------
+const UPSELL = {
+  register: {
+    title: "調べた商品を残しませんか",
+    lead: "この商品、仕入れたら帳簿に残せます。",
+    body: "有料版なら、いま出ている数字（仕入値・販売価格・手数料・利益）をそのまま販売管理に登録できます。月末には仕入先ごとの集計も出るので、確定申告の下ごしらえがそのまま終わります。",
+  },
+  history: {
+    title: "過去いくらで売れてきたか",
+    lead: "この商品の販売履歴を見られます。",
+    body: "相場が下がり続けている商品なのか、たまたま今だけ安いのか。有料版の販売履歴リサーチで、過去の売れた値段と間隔が見られます。",
+  },
+  n10: {
+    title: "SearchHub NEXT",
+    lead: "調べた商品、そのまま消えていってませんか。",
+    body: "有料版なら、仕入れた商品を帳簿に残せます。月別の仕入と販売、経費、価格改定まで1か所にまとまります。",
+  },
+  n30: {
+    title: "SearchHub NEXT",
+    lead: "その商品が安く出たとき、気づけていますか。",
+    body: "有料版は、追いかけたい商品を登録しておくと、10サイトを毎日自動で巡回します。安く出た瞬間に記録が残るので、探しに行く時間がまるごと要らなくなります。",
+  },
+  n60: {
+    title: "SearchHub NEXT",
+    lead: "これだけ調べているなら、もう元は取れています。",
+    body: "月980円です。1つ利益の出る商品を拾えたら、それで終わりの金額です。帳簿・価格改定・月別集計まで全部ついています。",
+  },
+};
+
+function showUpsell(kind) {
+  const u = UPSELL[kind] || UPSELL.n10;
+  document.getElementById("upTitle").innerText = u.title;
+  document.getElementById("upLead").innerText = u.lead;
+  document.getElementById("upBody").innerText = u.body;
+  document.getElementById("upsellModal").style.display = "flex";
+}
+function closeUpsell() { document.getElementById("upsellModal").style.display = "none"; }
+function goLp() { window.open(LP_URL, "_blank"); closeUpsell(); }
+
+// 累計の解析回数で、話の中身を変える
+function bumpTotalAndMaybeNudge() {
+  let n = parseInt(Store.get("shf_total", "0"), 10) || 0;
+  n += 1;
+  Store.set("shf_total", String(n));
+  let kind = null;
+  if (n === 10) kind = "n10";
+  else if (n === 30) kind = "n30";
+  else if (n === 60 || (n > 60 && (n - 60) % 30 === 0)) kind = "n60";
+  if (kind) setTimeout(function () { showUpsell(kind); }, 900);
+}
+
+// ---------- 残り回数 ----------
+function setRemain(n, limit) {
+  const bar = document.getElementById("remainBar");
+  if (n === null || n === undefined) { bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  document.getElementById("remainNum").innerText = n;
+}
+
+// ---------- サーバー経由でKeepaを呼ぶ ----------
+async function callKeepa(payload) {
+  const keepaKey = Store.get("shf_keepa", "");
+  const res = await fetch(FREE_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({ keepaKey: keepaKey }, payload)),
+  });
+  const r = await res.json();
+  if (r && typeof r.remaining === "number") setRemain(r.remaining, r.limit);
+  if (r && r.limitReached) { showLimit(r.message); throw new Error("__limit__"); }
+  if (!r || !r.success) throw new Error((r && r.message) || "取得に失敗しました");
+  return r.keepa;
+}
+
+function showLimit(msg) {
+  document.getElementById("result").innerHTML =
+    '<div class="card" style="text-align:center; padding:26px 16px;">' +
+      '<div style="font-size:28px; margin-bottom:8px;">🌙</div>' +
+      '<div style="font-size:15px; font-weight:900; color:#1a365d; margin-bottom:8px;">今日の20回を使い切りました</div>' +
+      '<div style="font-size:13px; color:#4a5568; line-height:1.9; margin-bottom:16px;">日付が変われば、また20回使えます。<br>回数を気にせず使いたい方は、有料版をご覧ください。</div>' +
+      '<a href="' + LP_URL + '" target="_blank" class="btn-link" style="background:#C9962B;">SearchHub NEXT を見る</a>' +
+    '</div>';
+  document.getElementById("historyArea").style.display = "none";
+}
+
+// ---------- 表示の部品 ----------
+function dropsBand(d90, d30) {
+  const a = Number(d90) || 0, b = Number(d30) || 0;
+  const monthly = Math.floor(a / 3);
+  let note = '<span style="color:#a0aec0;">動きが見えない</span>';
+  if (a > 0) {
+    if (b === 0) note = '<span style="color:#c53030;">直近30日は動きなし（普段は月' + monthly + '個ほど）</span>';
+    else if (monthly > 0 && b < monthly * 0.6) note = '<span style="color:#c53030;">直近が鈍い（普段は月' + monthly + '個ほど）</span>';
+    else if (monthly > 0 && b > monthly * 1.4) note = '<span style="color:#2f855a;">直近が伸びている（普段は月' + monthly + '個ほど）</span>';
+    else note = '<span style="color:#2f855a;">月' + monthly + '個ほど</span>';
+  }
+  const num = function (n) { return '<b style="font-size:17px; font-weight:900; margin:0 3px;">' + n + '</b>'; };
+  return '<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; padding:9px 12px;'
+    + ' background:#fffaf0; border:1px solid #fbd38d; border-radius:8px; flex-wrap:wrap;">'
+    + '<span style="font-size:11px; color:#b7791f; font-weight:900; white-space:nowrap;">ドロップ</span>'
+    + '<span style="font-size:11.5px; color:#975a16; font-weight:bold; white-space:nowrap;">90日' + num(a) + '回</span>'
+    + '<span style="color:#fbd38d;">／</span>'
+    + '<span style="font-size:11.5px; color:#975a16; font-weight:bold; white-space:nowrap;">30日' + num(b) + '回</span>'
+    + '<span style="margin-left:auto; font-size:11.5px; font-weight:800; white-space:nowrap;">' + note + '</span>'
+    + '</div>';
+}
+
+function trendLabel(v, recovering) {
+  if (v === null || v === undefined || v === "") return '<span style="color:#a0aec0;">-</span>';
+  const n = Number(v);
+  if (!isFinite(n)) return '<span style="color:#a0aec0;">-</span>';
+  if (n > 3) return '<span style="color:#2f855a; font-weight:900;">↗ ' + n.toFixed(1) + '%</span>';
+  if (n < -3) {
+    if (recovering) return '<span style="color:#4a5568; font-weight:900;">→ ' + n.toFixed(1) + '%</span><span style="color:#718096; font-size:9px; margin-left:3px;">下げ止まり</span>';
+    return '<span style="color:#c53030; font-weight:900;">↘ ' + n.toFixed(1) + '%</span>';
+  }
+  return '<span style="color:#4a5568; font-weight:900;">→ ' + n.toFixed(1) + '%</span>';
+}
+
+function copyAsin(asin) {
+  if (!asin) return;
+  navigator.clipboard.writeText(asin).then(function () {
+    const i = document.getElementById("copyIcon");
+    if (i) { i.className = "fas fa-check"; i.style.color = "#38a169"; setTimeout(function () { i.className = "far fa-copy"; i.style.color = "#a0aec0"; }, 1500); }
+  });
+}
+function googleSearch() {
+  let t = document.getElementById("itemModelText") ? document.getElementById("itemModelText").innerText.trim() : "";
+  if (!t || t === "-") t = document.getElementById("kw").value.trim();
+  if (!t) return alert("検索するキーワードがありません。");
+  window.open("https://www.google.com/search?q=" + encodeURIComponent(t + " amazon"), "_blank");
+}
+
+// ---------- 履歴 ----------
+function loadHistory() {
+  const area = document.getElementById("historyArea");
+  if (!area) return;
+  let h = [];
+  try { h = JSON.parse(Store.get("shf_history", "[]")); } catch (e) {}
+  if (h.length === 0) {
+    area.innerHTML = '<div class="card" style="text-align:center; color:#a0aec0; font-size:12px; padding:24px 12px;">'
+      + 'ASIN・JAN・型番を入れて「解析」を押してください。<br>カメラのボタンでバーコードも読めます。</div>';
+    return;
+  }
+  let html = '<div style="font-size:12px; font-weight:bold; color:#718096; margin:14px 2px 6px;"><i class="far fa-clock"></i> 最近の検索履歴</div>';
+  h.forEach(function (item) {
+    const img = item.img
+      ? '<div style="width:50px; height:50px; background:#fff; border:1px solid #eee; border-radius:6px; padding:2px; flex-shrink:0;"><img src="' + item.img + '" style="width:100%; height:100%; object-fit:contain;"></div>'
+      : '<div style="width:50px; height:50px; background:#f8fafc; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#999; border:1px solid #eee;">No Img</div>';
+    html += '<div onclick="document.getElementById(\'kw\').value=\'' + item.kw + '\'; runResearch();" class="card" style="display:flex; gap:10px; align-items:center; padding:10px; cursor:pointer; border-left:4px solid #4a5568; overflow:hidden;">'
+      + img
+      + '<div style="flex:1; min-width:0; overflow:hidden;">'
+      + '<div style="font-size:11px; font-weight:bold; color:#1a365d; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px;">' + escapeHtml(item.title) + '</div>'
+      + '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">'
+      + '<span style="background:#e0f2fe; color:#0369a1; padding:2px 5px; border-radius:4px; font-size:9px; font-weight:bold;">' + item.kw + '</span>'
+      + '<span style="border:1px solid ' + item.rColor + '; color:' + item.rColor + '; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:bold;">' + item.rank + '</span>'
+      + '<span style="background:#f0f4ff; color:#2c4c8f; border:1px solid #dbeafe; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:bold;">中古 ' + item.used + '</span>'
+      + '</div></div></div>';
+  });
+  area.innerHTML = html;
+}
+
+function saveHistory(d) {
+  let h = [];
+  try { h = JSON.parse(Store.get("shf_history", "[]")); } catch (e) {}
+  h = h.filter(function (x) { return x.kw !== d.kw; });
+  h.unshift(d);
+  if (h.length > 20) h = h.slice(0, 20);
+  Store.set("shf_history", JSON.stringify(h));
+  loadHistory();
+}
+
+// ---------- 解析 ----------
+async function runResearch() {
+  const kw = document.getElementById("kw").value.trim();
+  const resView = document.getElementById("result");
+  if (!kw) return alert("キーワードかASINを入力してください");
+  if (!Store.get("shf_keepa", "")) { openConfig(); return alert("⚙️設定からKeepa APIキーを入力してください"); }
+
+  resView.innerHTML = '<div class="loading-spinner">⌛ Keepaに問い合わせています...</div>';
+  document.getElementById("historyArea").style.display = "none";
+
+  try {
+    let asin = kw;
+    if (!/^[A-Z0-9]{10}$/i.test(kw)) {
+      const s = await callKeepa({ kind: "search", term: kw });
+      if (!s.products || s.products.length === 0) {
+        resView.innerHTML = '<div class="card" style="color:#e53e3e; text-align:center;">❌ 商品が見つかりませんでした。</div>';
+        document.getElementById("historyArea").style.display = "block";
+        return;
+      }
+      asin = s.products[0].asin;
+    }
+
+    const prodJson = await callKeepa({ kind: "product", asin: asin, stats: "90", buybox: true });
+    const p = prodJson.products[0];
+    if (!p) {
+      resView.innerHTML = '<div class="card" style="color:#e53e3e; text-align:center;">❌ 商品が見つかりませんでした。</div>';
+      document.getElementById("historyArea").style.display = "block";
+      return;
+    }
+
+    const productTitle = p.title || "不明";
+    const modelNum = p.model || "不明";
+
+    let imgRaw = "";
+    if (p.images && p.images.length > 0) {
+      const f = p.images[0];
+      imgRaw = (typeof f === "object") ? (f.l || f.m || f.s) : f;
+    } else if (p.imagesCSV) imgRaw = p.imagesCSV.split(",")[0];
+    const imageUrl = imgRaw ? (String(imgRaw).startsWith("http") ? imgRaw : "https://images-na.ssl-images-amazon.com/images/I/" + imgRaw) : "";
+
+    const avgUsed = (p.stats.avg90 && p.stats.avg90[2] !== -1) ? p.stats.avg90[2] : 0;
+    const minUsed = (p.stats.current && p.stats.current[2] !== -1) ? p.stats.current[2] : 0;
+    const referralFeePercent = p.referralFeePercentage || 10;
+
+    let bbUsedPrice = 0;
+    if (p.stats) {
+      if (p.stats.buyBoxUsedPrice !== undefined && p.stats.buyBoxUsedPrice > 0) {
+        bbUsedPrice = p.stats.buyBoxUsedPrice + (p.stats.buyBoxUsedShipping > 0 ? p.stats.buyBoxUsedShipping : 0);
+      } else if (p.stats.buyBoxIsUsed === true) {
+        if (p.stats.current && p.stats.current[18] !== undefined && p.stats.current[18] !== -1) bbUsedPrice = p.stats.current[18];
+        else if (p.stats.buyBoxPrice !== undefined && p.stats.buyBoxPrice > 0) bbUsedPrice = p.stats.buyBoxPrice + (p.stats.buyBoxShipping > 0 ? p.stats.buyBoxShipping : 0);
+      }
+    }
+    let bbValText = "", bbNote = "";
+    if (bbUsedPrice > 0) {
+      bbValText = "¥" + bbUsedPrice.toLocaleString();
+    } else {
+      const bbNew = (p.stats && p.stats.buyBoxPrice > 0) ? p.stats.buyBoxPrice + (p.stats.buyBoxShipping > 0 ? p.stats.buyBoxShipping : 0) : 0;
+      if (bbNew > 0) { bbValText = "¥" + bbNew.toLocaleString(); bbNote = "新品が取得中"; }
+      else if (prodJson.error) { bbValText = "Keepaエラー"; bbNote = String(prodJson.error.type || prodJson.error.message || ""); }
+      else if (typeof prodJson.tokensLeft === "number" && prodJson.tokensLeft < 0) { bbValText = "トークン不足"; bbNote = "残" + prodJson.tokensLeft; }
+      else { bbValText = "カート無し"; }
+    }
+
+    const usedOffers = (p.stats.current && p.stats.current[12] !== -1) ? p.stats.current[12] : 0;
+    const usedCountAvg90 = (p.stats.avg90 && p.stats.avg90[12] !== -1) ? p.stats.avg90[12] : usedOffers;
+    const fbaFee = p.fbaFees ? (p.fbaFees.totalFee || p.fbaFees.pickAndPackFee || 430) : 430;
+
+    const avg30Used = (p.stats.avg30 && p.stats.avg30[2] > 0) ? p.stats.avg30[2] : 0;
+    const priceTrend = (avg30Used > 0 && avgUsed > 0) ? Math.round(((avg30Used - avgUsed) / avgUsed) * 1000) / 10 : null;
+    const priceRecovering = (avg30Used > 0 && minUsed > 0) ? (minUsed >= avg30Used) : false;
+
+    const drops = p.stats.salesRankDrops90 || 0;
+    const drops30 = p.stats.salesRankDrops30 || 0;
+
+    // ランク（有料版・サーバーと同じ式）
+    const mSales = Math.floor(drops / 3);
+    let score = 0;
+    if (mSales >= 10) score += 3;
+    else if (mSales >= 5) score += 2;
+    else if (mSales >= 3) score += 1;
+    if (drops >= 20) score += 2;
+    else if (drops >= 10) score += 1;
+    if (usedOffers >= 1 && usedOffers <= 2) score += 2;
+    else if (usedOffers >= 3 && usedOffers <= 5) score += 1;
+    else if (usedOffers >= 8) score -= 2;
+    if (score >= 7) {
+      const isPriceDropping = minUsed < avgUsed;
+      const isSellerIncreasing = usedOffers > usedCountAvg90;
+      const isRecentStagnant = drops30 === 0;
+      if (isPriceDropping || isSellerIncreasing || isRecentStagnant) score -= 1;
+    }
+    let rank = "E";
+    if (score >= 7) rank = "S";
+    else if (score >= 5) rank = "A";
+    else if (score >= 3) rank = "B";
+    else if (score === 2) rank = "C";
+    else if (score === 1) rank = "D";
+
+    const SR_OUT_OF_STOCK_PERCENT = 80, SR_MIN_DROPS90 = 3, SR_MAX_USED_OFFERS = 2, SR_MIN_CHEAPER_PERCENT = 15;
+    const oos = (p.stats.outOfStockPercentage90 && typeof p.stats.outOfStockPercentage90[2] === "number" && p.stats.outOfStockPercentage90[2] >= 0) ? p.stats.outOfStockPercentage90[2] : -1;
+    const newOffers = (p.stats.current && p.stats.current[11] > 0) ? p.stats.current[11] : 0;
+    const newPrice = (p.stats.current && p.stats.current[1] > 0) ? p.stats.current[1] : 0;
+    const hasNew = newOffers > 0 || newPrice > 0;
+    const isDotted = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && usedOffers <= SR_MAX_USED_OFFERS;
+    const isRare = isDotted && (hasNew ? (minUsed > 0 && newPrice > 0 && minUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true);
+    if (isRare) rank = "SR";
+    const RANK_COLORS = { SR: "#a855f7", S: "#ff0000", A: "#ff8c00", B: "#32cd32", C: "#1e90ff", D: "#808080", E: "#808080" };
+    const rColor = RANK_COLORS[rank] || "#808080";
+
+    // サイズ（有料版・サーバーと同じ式）
+    const sizeTier = (function () {
+      const dims = [
+        p.packageLength || p.itemLength || 0,
+        p.packageWidth || p.itemWidth || 0,
+        p.packageHeight || p.itemHeight || 0,
+      ].filter(function (v) { return v > 0; });
+      const weightG = p.packageWeight || p.itemWeight || 0;
+      if (dims.length === 3) {
+        const sorted = dims.sort(function (a, b) { return b - a; });
+        const limits = [450, 350, 200];
+        for (let i = 0; i < 3; i++) if (sorted[i] > limits[i]) return "大型";
+        return weightG > 9000 ? "大型" : "標準";
+      }
+      if (weightG > 9000) return "大型";
+      return fbaFee > 650 ? "大型" : "標準";
+    })();
+
+    const imgHtml = imageUrl
+      ? '<div style="width:70px; height:70px; background:#fff; border:1px solid #eee; border-radius:8px; padding:4px; flex-shrink:0;"><img src="' + imageUrl + '" style="width:100%; height:100%; object-fit:contain;"></div>'
+      : '<div style="width:70px; height:70px; background:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#999; border:1px solid #eee;">No Img</div>';
+
+    resView.innerHTML =
+      '<div class="card" style="display:flex; gap:12px; align-items:flex-start; margin-bottom:4px;">'
+        + imgHtml
+        + '<div style="flex:1; min-width:0;">'
+          + '<div style="font-size:11px; color:#555; font-weight:bold; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">型番: <span id="itemModelText" style="color:#000;">' + escapeHtml(modelNum !== "不明" ? modelNum : productTitle.substring(0, 30) + "...") + '</span></div>'
+          + '<div style="display:flex; align-items:center; gap:4px; margin-bottom:6px; cursor:pointer;" onclick="copyAsin(\'' + asin + '\')">'
+            + '<span style="font-size:11px; font-weight:bold; color:#666;">ASIN:</span>'
+            + '<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">' + asin + '</span>'
+            + '<i class="far fa-copy" id="copyIcon" style="color:#a0aec0; font-size:12px; margin-left:4px;"></i>'
+          + '</div>'
+          + '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">'
+            + '<span class="badge" style="border:1px solid ' + rColor + '; color:' + rColor + '; padding:3px 8px;">' + rank + 'ランク</span>'
+            + '<span class="badge" style="background:' + (sizeTier === "大型" ? "#e53e3e" : "#07A27B") + '; color:#fff; padding:3px 8px;">' + sizeTier + '</span>'
+            + '<a href="https://sellercentral.amazon.co.jp/product-search/search?q=' + asin + '" target="_blank" style="background:#e53e3e; color:#fff; text-decoration:none; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:bold;">規制確認</a>'
+            + '<button onclick="showUpsell(\'history\')" style="background:#4285f4; color:#fff; border:none; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:10px; cursor:pointer;"><i class="fas fa-history"></i> 販売履歴リサーチ</button>'
+          + '</div>'
+        + '</div>'
+        + '<div style="flex-shrink:0; width:55px;">'
+          + '<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f0f4ff; border:1px solid #dbeafe; padding:6px 4px; border-radius:8px;">'
+            + '<span style="font-size:10px; color:#4a72b2; font-weight:bold; margin-bottom:2px;">中古出品</span>'
+            + '<span style="font-size:18px; font-weight:900; color:#2c4c8f; line-height:1;">' + usedOffers + '</span>'
+          + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<div style="font-size:10px; color:#718096; text-align:right; margin-bottom:6px; padding-right:4px;">※Keepaの情報を元に表示しています</div>'
+      + '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:12px;">'
+        + '<div style="background:#ebf8ff; border:1px solid #bee3f8; padding:8px 4px; border-radius:8px; text-align:center;">'
+          + '<div style="font-size:10px; color:#2b6cb0; font-weight:bold; margin-bottom:2px;">平均(90)</div>'
+          + '<div style="font-size:13px; font-weight:bold; color:#2c5282;">¥' + (avgUsed > 0 ? avgUsed.toLocaleString() : "0") + '</div>'
+          + '<div style="font-size:10px; margin-top:2px;">' + trendLabel(priceTrend, priceRecovering) + '</div>'
+        + '</div>'
+        + '<div style="background:#fff5f5; border:1px solid #fed7d7; padding:8px 4px; border-radius:8px; text-align:center;">'
+          + '<div style="font-size:10px; color:#c53030; font-weight:bold; margin-bottom:2px;">中古最安</div>'
+          + '<div style="font-size:13px; font-weight:bold; color:#9b2c2c;">¥' + (minUsed > 0 ? minUsed.toLocaleString() : "0") + '</div>'
+        + '</div>'
+        + '<div style="background:#f0fff4; border:1px solid #c6f6d5; padding:8px 4px; border-radius:8px; text-align:center;">'
+          + '<div style="font-size:10px; color:#2f855a; font-weight:bold; margin-bottom:2px;">カート価格</div>'
+          + '<div style="font-size:13px; font-weight:bold; color:#22543d;">' + bbValText + '</div>'
+          + (bbNote ? '<div style="font-size:9px; color:#718096; margin-top:1px;">' + bbNote + '</div>' : '')
+        + '</div>'
+      + '</div>'
+      + dropsBand(drops, drops30)
+      + '<div class="calc-box">'
+        + '<div class="calc-row"><span>仕入れ値</span><input type="number" id="bPrice" placeholder="0"></div>'
+        + '<div class="calc-row"><span>経費/送料</span><input type="number" id="ePrice" placeholder="0"></div>'
+        + '<div class="calc-row"><span>販売価格</span><input type="number" id="sPrice" value="' + minUsed + '"></div>'
+        + '<div style="border-top:1px solid #555; margin:12px 0 8px; padding-top:8px; font-size:12px; color:#aaa;">'
+          + '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>販売手数料 (' + referralFeePercent + '%)</span><span id="resComm">--</span></div>'
+          + '<div style="display:flex; justify-content:space-between;"><span>FBA手数料</span><span>-¥' + fbaFee.toLocaleString() + '</span></div>'
+        + '</div>'
+        + '<div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:14px; color:#90cdf4;"><span>入金目安</span><span id="resNyukin">--</span></div>'
+        + '<div style="display:flex; justify-content:space-between; font-size:18px; color:#48bb78;"><span>想定利益</span><span id="resProfit">--</span></div>'
+      + '</div>'
+      + '<button class="register-btn" onclick="showUpsell(\'register\')" style="margin-bottom:12px;">🚀 商品登録</button>'
+      + '<div class="grid-3">'
+        + '<a href="https://keepa.com/#!product/5-' + asin + '" target="_blank" class="btn-link" style="background:#55a676;">Keepa</a>'
+        + '<button onclick="googleSearch()" class="btn-link" style="background:#3f51b5;">検索</button>'
+        + '<a href="https://www.amazon.co.jp/dp/' + asin + '" target="_blank" class="btn-link" style="background:#f7941d;">Amazon</a>'
+      + '</div>';
+
+    const updateCalc = function () {
+      const s = parseInt(document.getElementById("sPrice").value) || 0;
+      const b = parseInt(document.getElementById("bPrice").value) || 0;
+      const e = parseInt(document.getElementById("ePrice").value) || 0;
+      const comm = Math.floor(s * (referralFeePercent / 100));
+      const nyukin = s - comm - fbaFee;
+      const profit = nyukin - b - e;
+      const margin = s > 0 ? Math.floor((profit / s) * 100) : 0;
+      document.getElementById("resComm").innerText = "-¥" + comm.toLocaleString();
+      document.getElementById("resNyukin").innerText = "¥" + nyukin.toLocaleString();
+      document.getElementById("resProfit").innerText = "¥" + profit.toLocaleString() + " (" + margin + "%)";
+      document.getElementById("resProfit").style.color = profit >= 0 ? "#48bb78" : "#e53e3e";
+    };
+    ["sPrice", "bPrice", "ePrice"].forEach(function (id) {
+      document.getElementById(id).addEventListener("input", updateCalc);
+    });
+    updateCalc();
+
+    document.getElementById("historyArea").style.display = "block";
+    saveHistory({ kw: asin, title: productTitle, img: imageUrl, rank: rank, rColor: rColor, used: usedOffers });
+    bumpTotalAndMaybeNudge();
+
+  } catch (err) {
+    if (String(err && err.message) === "__limit__") return;
+    resView.innerHTML = '<div class="card" style="color:#e53e3e; text-align:center; font-weight:bold;">❌ ' + escapeHtml(err && err.message ? err.message : "解析エラーが発生しました") + '</div>';
+    document.getElementById("historyArea").style.display = "block";
+  }
+}
+
+// ---------- バーコード ----------
+function startScan() {
+  const area = document.getElementById("scannerArea");
+  const status = document.getElementById("scannerStatus");
+  area.style.display = "block";
+  status.innerText = "カメラ初期化中...";
+  Quagga.init({
+    inputStream: {
+      name: "Live", type: "LiveStream",
+      target: document.getElementById("scannerVideo"),
+      constraints: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "environment" },
+      area: { top: "0%", right: "0%", left: "0%", bottom: "0%" },
+    },
+    decoder: { readers: ["ean_reader", "ean_8_reader"] },
+    locate: true,
+  }, function (err) {
+    if (err) { alert("カメラの起動に失敗しました。"); area.style.display = "none"; return; }
+    Quagga.start();
+    status.innerText = "バーコード（JANコード）読み取り中...";
+  });
+  Quagga.onDetected(function (r) {
+    if (r && r.codeResult && r.codeResult.code) {
+      const m = String(r.codeResult.code).match(/^(49\d{11}|45\d{11})$/);
+      if (m) {
+        status.innerText = "🎯 読み取り成功！";
+        document.getElementById("kw").value = m[1];
+        if (navigator.vibrate) navigator.vibrate(200);
+        Quagga.offDetected();
+        setTimeout(function () { stopScan(); runResearch(); }, 500);
+      }
+    }
+  });
+}
+function stopScan() {
+  try { Quagga.stop(); Quagga.offDetected(); } catch (e) {}
+  document.getElementById("scannerArea").style.display = "none";
+}
+
+// ---------- 起動 ----------
+window.addEventListener("load", function () {
+  loadHistory();
+  if (!Store.get("shf_keepa", "")) setTimeout(openConfig, 400);
+});
+</script>
+</body>
+</html>
