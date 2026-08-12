@@ -264,7 +264,9 @@ function setRemain(n, limit) {
 }
 
 // ---------- サーバー経由でKeepaを呼ぶ ----------
-async function callKeepa(payload) {
+// 🌟 往復は1回だけ。ASINでもJANでもキーワードでも、
+//   サーバーの中で商品にたどり着くまでやってもらう。
+async function callFree(payload) {
   const keepaKey = Store.get("shf_keepa", "");
   const res = await fetch(FREE_API, {
     method: "POST",
@@ -275,7 +277,20 @@ async function callKeepa(payload) {
   if (r && typeof r.remaining === "number") setRemain(r.remaining, r.limit);
   if (r && r.limitReached) { showLimit(r.message); throw new Error("__limit__"); }
   if (!r || !r.success) throw new Error((r && r.message) || "取得に失敗しました");
-  return r.keepa;
+  return r;
+}
+
+// 🌟 画面を開いた瞬間に、中身のない呼び出しを1回だけ投げて関数を温めておく。
+//   Edge Functionはしばらく使われていないと起動に1〜3秒かかる。
+//   お客さんがキーワードを打っている間に済ませてしまう。
+function warmUp() {
+  try {
+    fetch(FREE_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ping: true }),
+    }).catch(function () {});
+  } catch (e) {}
 }
 
 function showLimit(msg) {
@@ -387,24 +402,15 @@ async function runResearch() {
   document.getElementById("historyArea").style.display = "none";
 
   try {
-    let asin = kw;
-    if (!/^[A-Z0-9]{10}$/i.test(kw)) {
-      const s = await callKeepa({ kind: "search", term: kw });
-      if (!s.products || s.products.length === 0) {
-        resView.innerHTML = '<div class="card" style="color:#e53e3e; text-align:center;">❌ 商品が見つかりませんでした。</div>';
-        document.getElementById("historyArea").style.display = "block";
-        return;
-      }
-      asin = s.products[0].asin;
-    }
-
-    const prodJson = await callKeepa({ kind: "product", asin: asin, stats: "90", buybox: true });
-    const p = prodJson.products[0];
-    if (!p) {
+    const r = await callFree({ term: kw, stats: "90", buybox: true });
+    const prodJson = r.keepa || {};
+    const p = prodJson.products ? prodJson.products[0] : null;
+    if (r.notFound || !p) {
       resView.innerHTML = '<div class="card" style="color:#e53e3e; text-align:center;">❌ 商品が見つかりませんでした。</div>';
       document.getElementById("historyArea").style.display = "block";
       return;
     }
+    const asin = r.asin || p.asin;
 
     const productTitle = p.title || "不明";
     const modelNum = p.model || "不明";
@@ -652,6 +658,7 @@ function hideLoader() {
 
 window.addEventListener("load", function () {
   loadHistory();
+  warmUp();
   setTimeout(hideLoader, 900);
   if (!Store.get("shf_keepa", "")) setTimeout(openConfig, 1600);
 });
