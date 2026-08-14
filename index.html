@@ -60,7 +60,7 @@
   .btn-link { display: flex; justify-content: center; align-items: center; color: #fff; text-decoration: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; border: none; cursor: pointer; }
   .loading-spinner { text-align: center; padding: 40px; font-size: 13px; color: #2b6cb0; font-weight: bold; }
 
-  .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  .searchbar { display: flex; gap: 8px; margin-bottom: 10px; position: relative; }
   .searchbar input { flex: 1; min-width: 0; padding: 12px; border: 1px solid #cbd5e0; border-radius: 10px; font-size: 15px; }
   .searchbar button { border: none; border-radius: 10px; font-weight: bold; font-size: 15px; cursor: pointer; }
   .btn-cam { background: #4a5568; color: #fff; width: 48px; }
@@ -116,6 +116,7 @@
 <div class="wrap">
 
   <div class="searchbar">
+    <div id="dict-suggest" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e0; border-radius:8px; box-shadow:0 6px 16px rgba(0,0,0,0.12); z-index:50; max-height:60vh; overflow-y:auto; text-align:left;"></div>
     <input type="text" id="kw" placeholder="ASIN・JAN・型番を入力..." onkeydown="if(event.key==='Enter')runResearch()">
     <button class="btn-cam" onclick="startScan()"><i class="fas fa-camera"></i></button>
     <button class="btn-go" onclick="runResearch()">解析</button>
@@ -326,16 +327,230 @@ function dropsBand(d90, d30) {
     + '</div>';
 }
 
-function trendLabel(v, recovering) {
-  if (v === null || v === undefined || v === "") return '<span style="color:#a0aec0;">-</span>';
-  const n = Number(v);
-  if (!isFinite(n)) return '<span style="color:#a0aec0;">-</span>';
-  if (n > 3) return '<span style="color:#2f855a; font-weight:900;">↗ ' + n.toFixed(1) + '%</span>';
-  if (n < -3) {
-    if (recovering) return '<span style="color:#4a5568; font-weight:900;">→ ' + n.toFixed(1) + '%</span><span style="color:#718096; font-size:9px; margin-left:3px;">下げ止まり</span>';
-    return '<span style="color:#c53030; font-weight:900;">↘ ' + n.toFixed(1) + '%</span>';
+// 🌟【値動き】30日・90日・180日の平均の並び順で向きを決める。
+//   有料版・サーバーとまったく同じ判定。%表示はやめた（差が薄まって実感と合わないため）。
+const TREND_MIN_SPREAD_PERCENT = 5;
+const TREND_RARE_OOS_PERCENT = 70;
+const TREND_MAX_OOS_PERCENT = 50;
+const TREND_SPIKE_MULTIPLIER = 1.3;
+
+// 🌟【鉄板値】よこよこの相場から一瞬だけ落ちて、すぐ売れて消える値段。
+//   数字も条件も有料版・サーバーと同じ。ここを変えると答えがズレる。
+const SOLID_MAX_HOURS = 48;
+const SOLID_DEPTH_PERCENT = 7;
+const SOLID_BAND_YEN = 500;
+const SOLID_BAND_PERCENT = 5;
+const SOLID_MIN_HITS = 2;
+const SOLID_DAYS = 90;
+const KEEPA_EPOCH_MIN = 21564000;
+
+function readKeepaSeries(csv, index) {
+  const arr = csv && csv[index];
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (let i = 0; i + 1 < arr.length; i += 2) {
+    const t = Number(arr[i]);
+    const v = Number(arr[i + 1]);
+    if (!isFinite(t) || !isFinite(v)) continue;
+    out.push({ t: (t + KEEPA_EPOCH_MIN) * 60000, v: v });
   }
-  return '<span style="color:#4a5568; font-weight:900;">→ ' + n.toFixed(1) + '%</span>';
+  return out;
+}
+
+function calcSolidPrice(csv) {
+  const series = readKeepaSeries(csv, 2); // 2 = 中古
+  if (series.length < 3) return null;
+  const since = Date.now() - SOLID_DAYS * 24 * 60 * 60 * 1000;
+  const maxMs = SOLID_MAX_HOURS * 3600000;
+
+  const dips = [];
+  for (let i = 1; i + 1 < series.length; i++) {
+    const prev = series[i - 1], cur = series[i], next = series[i + 1];
+    if (cur.t < since) continue;
+    if (!(cur.v > 0) || !(prev.v > 0) || !(next.v > 0)) continue;
+    if (!(cur.v < prev.v) || !(next.v > cur.v)) continue;
+    const shoulder = Math.min(prev.v, next.v);
+    if (!(cur.v <= shoulder * (1 - SOLID_DEPTH_PERCENT / 100))) continue;
+    const ms = next.t - cur.t;
+    if (ms <= 0 || ms > maxMs) continue;
+    dips.push({ v: cur.v, ms: ms, t: cur.t });
+  }
+  if (dips.length < SOLID_MIN_HITS) return null;
+
+  const byNew = dips.slice().sort(function (a, b) { return b.t - a.t; });
+  for (let n = 0; n < byNew.length; n++) {
+    const anchor = byNew[n];
+    const band = Math.max(SOLID_BAND_YEN, Math.round(anchor.v * SOLID_BAND_PERCENT / 100));
+    const group = dips.filter(function (d) { return Math.abs(d.v - anchor.v) <= band; });
+    if (group.length < SOLID_MIN_HITS) continue;
+    const price = Math.round(group.reduce(function (s, d) { return s + d.v; }, 0) / group.length);
+    const ls = group.map(function (d) { return d.ms; }).sort(function (a, b) { return a - b; });
+    const midMs = ls.length % 2 === 1 ? ls[(ls.length - 1) / 2] : (ls[ls.length / 2 - 1] + ls[ls.length / 2]) / 2;
+    return { price: price, dips: group.length, medHours: Math.round(midMs / 3600000 * 10) / 10 };
+  }
+  return null;
+}
+
+// 相場が鉄板値の下を通り抜けた商品は、もう使えない古い値段なので捨てる。
+function solidFromStats(stats, csv) {
+  const solid = calcSolidPrice(csv);
+  if (!solid) return null;
+  const avg30Used = (stats && Array.isArray(stats.avg30) && stats.avg30[2] > 0) ? stats.avg30[2] : 0;
+  if (avg30Used > 0 && solid.price > avg30Used) return null;
+  return solid;
+}
+
+function solidBand(solid) {
+  if (!solid) return "";
+  return '<div style="background:#fffbeb; border:1px solid #f6e05e; border-radius:8px; padding:8px 12px; margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">'
+    + '<span style="font-size:11px; color:#b7791f; font-weight:900;">鉄板値</span>'
+    + '<span style="font-size:16px; font-weight:900; color:#975a16;">¥' + Number(solid.price).toLocaleString() + '</span>'
+    + '<span style="font-size:10.5px; color:#975a16;">' + solid.dips + '回 / ' + solid.medHours + '時間で消える</span>'
+    + '</div>';
+}
+
+// 🌟 貼り付けた文字からASINを取り出す。
+//   Googleで探し直したAmazonのURLを、そのまま貼れるようにするため。
+function pickAsinFromText(text) {
+  const s = String(text || "");
+  const m = s.match(/(?:\/dp\/|\/gp\/product\/|\/product\/|\/ASIN\/)([A-Z0-9]{10})/i);
+  if (m) return m[1].toUpperCase();
+  const b = s.match(/\b(B0[A-Z0-9]{8})\b/i);
+  if (b) return b[1].toUpperCase();
+  return null;
+}
+
+// 🌟【辞書サジェスト】打ちながら候補を出す。Keepaは叩かないのでトークンは0。
+let dictSuggestTimer = null;
+let dictSuggestLast = "";
+
+function hideDictSuggest() {
+  const box = document.getElementById('dict-suggest');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+
+function renderDictSuggest(items) {
+  const box = document.getElementById('dict-suggest');
+  if (!box) return;
+  if (!items || items.length === 0) { hideDictSuggest(); return; }
+  let html = '';
+  items.forEach(function (c) {
+    const name = c.title || c.model || c.asin;
+    html += '<div class="dict-sg-row" data-asin="' + c.asin + '" style="padding:8px 10px; border-bottom:1px solid #edf2f7; cursor:pointer;">'
+      + '<div style="font-size:12px; color:#2d3748; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(name) + '</div>'
+      + '<div style="font-size:10px; color:#718096;">' + escapeHtml(c.brand || '') + (c.model ? ' / ' + escapeHtml(c.model) : '') + ' / ' + c.asin + '</div>'
+      + '</div>';
+  });
+  box.innerHTML = html + '<div style="padding:6px 10px; font-size:10px; color:#a0aec0; background:#f7fafc;">辞書から出しています。選んでも解析するまでトークンは使いません</div>';
+  box.style.display = 'block';
+  box.querySelectorAll('.dict-sg-row').forEach(function (row) {
+    row.onclick = function () {
+      document.getElementById('kw').value = row.dataset.asin;
+      hideDictSuggest();
+      runResearch();
+    };
+  });
+}
+
+async function askDictSuggest(term) {
+  try {
+    const res = await fetch(FREE_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ suggest: true, term: term }),
+    });
+    const j = await res.json();
+    if (j && j.success) renderDictSuggest(j.items || []);
+  } catch (e) {}
+}
+
+document.addEventListener('input', function (e) {
+  if (!e.target || e.target.id !== 'kw') return;
+  const v = String(e.target.value || '').trim();
+  if (dictSuggestTimer) clearTimeout(dictSuggestTimer);
+  if (v.length < 3 || /^[A-Z0-9]{10}$/i.test(v) || v.indexOf('http') === 0) { hideDictSuggest(); return; }
+  if (v === dictSuggestLast) return;
+  dictSuggestTimer = setTimeout(function () { dictSuggestLast = v; askDictSuggest(v); }, 350);
+});
+
+document.addEventListener('click', function (e) {
+  const box = document.getElementById('dict-suggest');
+  if (!box || box.style.display === 'none') return;
+  if (e.target && (e.target.id === 'kw' || box.contains(e.target))) return;
+  hideDictSuggest();
+});
+
+// 🌟【辞書の候補】型番だけでは商品が1つに決まらなかったときに出す。
+//   選べばKeepaの検索(10トークン)は要らず、商品データの3トークンだけで済む。
+function dictPickerHtml(cands) {
+  let rows = "";
+  for (let i = 0; i < cands.length; i++) {
+    const c = cands[i];
+    const name = c.title || c.model || c.asin;
+    rows += '<div style="display:flex; align-items:center; gap:8px; padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px; background:#fff;">'
+      + '<div style="flex:1; min-width:0;">'
+        + '<div style="font-size:12px; color:#2d3748; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(name) + '</div>'
+        + '<div style="font-size:10px; color:#718096;">' + escapeHtml(c.brand || "") + (c.model ? " / " + escapeHtml(c.model) : "") + " / " + c.asin + '</div>'
+      + '</div>'
+      + '<button onclick="pickDictAsin(\'' + c.asin + '\')" style="background:#07A27B; color:#fff; border:none; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:11px; cursor:pointer; white-space:nowrap;">これで解析</button>'
+    + '</div>';
+  }
+  return '<div class="card" style="text-align:left;">'
+    + '<div style="font-size:13px; font-weight:bold; color:#2d3748; margin-bottom:2px;">この型番は商品が1つに決まりませんでした</div>'
+    + '<div style="font-size:11px; color:#718096; margin-bottom:10px;">色ちがい・個数ちがいでASINが分かれています。選べば<b>3トークン</b>で解析します。</div>'
+    + rows
+    + '<div style="margin-top:8px; text-align:center;">'
+      + '<button onclick="forceKeepaSearch()" style="background:#4a5568; color:#fff; border:none; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">この中に無い（Keepaで検索・10トークン）</button>'
+    + '</div>'
+  + '</div>';
+}
+
+function pickDictAsin(asin) {
+  const box = document.getElementById("kw");
+  if (box) box.value = asin;
+  runResearch();
+}
+
+function forceKeepaSearch() {
+  window.__forceKeepaSearch = true;
+  runResearch();
+}
+
+function calcTrendLabelFromStats(stats) {
+  if (!stats) return null;
+  const g = function (arr, i) { return (Array.isArray(arr) && typeof arr[i] === "number" && arr[i] > 0) ? arr[i] : 0; };
+  const oos90 = (Array.isArray(stats.outOfStockPercentage90) && typeof stats.outOfStockPercentage90[2] === "number" && stats.outOfStockPercentage90[2] >= 0) ? stats.outOfStockPercentage90[2] : -1;
+  if (oos90 >= TREND_RARE_OOS_PERCENT) return "レア";
+  if (oos90 < 0) return null;
+  if (oos90 > TREND_MAX_OOS_PERCENT) return "要確認";
+  const now = g(stats.current, 2);
+  const avg30 = g(stats.avg30, 2);
+  const avg90 = g(stats.avg90, 2);
+  const avg180 = g(stats.avg180, 2);
+  if (!(avg30 > 0) || !(avg90 > 0) || !(avg180 > 0)) return null;
+  const spread = Math.abs(avg30 - avg180) / avg180 * 100;
+  if (spread < TREND_MIN_SPREAD_PERCENT) return "もみもみ";
+  if (avg30 < avg90 && avg90 < avg180) {
+    if (!(now > 0)) return "下降";
+    if (now <= avg30) return "下降・継続中";
+    if (now <= avg30 * TREND_SPIKE_MULTIPLIER) return "下降が終了";
+    return "下降・品薄で跳ね";
+  }
+  if (avg30 > avg90 && avg90 > avg180) return "上昇";
+  return "もみもみ";
+}
+
+function trendBadge(label) {
+  const sub = function (t) { return '<span style="color:#718096; font-size:9px; margin-left:3px;">' + t + '</span>'; };
+  if (label === "上昇") return '<span style="color:#2f855a; font-weight:900;">↗ 上昇</span>';
+  if (label === "下降・継続中") return '<span style="color:#c53030; font-weight:900;">↘ 下降</span>' + sub("継続中");
+  if (label === "下降・品薄で跳ね") return '<span style="color:#c53030; font-weight:900;">↘ 下降</span>' + sub("品薄で跳ね");
+  if (label === "下降が終了") return '<span style="color:#4a5568; font-weight:900;">→ 下降が終了</span>';
+  if (label === "下降") return '<span style="color:#c53030; font-weight:900;">↘ 下降</span>';
+  if (label === "もみもみ") return '<span style="color:#4a5568; font-weight:900;">→ もみもみ</span>';
+  if (label === "レア") return '<span style="color:#a855f7; font-weight:900;">★ レア</span>';
+  if (label === "要確認") return '<span style="color:#b7791f; font-weight:900;">◆ 要確認</span>' + sub("中古が薄い");
+  return '<span style="color:#a0aec0;">-</span>';
 }
 
 function copyAsin(asin) {
@@ -398,11 +613,21 @@ async function runResearch() {
   if (!kw) return alert("キーワードかASINを入力してください");
   if (!Store.get("shf_keepa", "")) { openConfig(); return alert("⚙️設定からKeepa APIキーを入力してください"); }
 
+  hideDictSuggest();
   resView.innerHTML = '<div class="loading-spinner">⌛ Keepaに問い合わせています...</div>';
   document.getElementById("historyArea").style.display = "none";
 
   try {
-    const r = await callFree({ term: kw, stats: "90", buybox: true });
+    // AmazonのURLを貼られたときは、そこからASINを抜いて使う（検索の10トークンが要らなくなる）
+    const pickedAsin = pickAsinFromText(kw);
+    const forceSearch = window.__forceKeepaSearch === true;
+    window.__forceKeepaSearch = false;
+    const r = await callFree({ term: pickedAsin || kw, stats: "90", buybox: true, force: forceSearch });
+    // 辞書で1つに決まらなかったときは、候補を出して選んでもらう（トークンは0）
+    if (r && r.needPick && Array.isArray(r.dictCandidates) && r.dictCandidates.length > 1) {
+      resView.innerHTML = dictPickerHtml(r.dictCandidates);
+      return;
+    }
     const prodJson = r.keepa || {};
     const p = prodJson.products ? prodJson.products[0] : null;
     if (r.notFound || !p) {
@@ -450,9 +675,10 @@ async function runResearch() {
     const usedCountAvg90 = (p.stats.avg90 && p.stats.avg90[12] !== -1) ? p.stats.avg90[12] : usedOffers;
     const fbaFee = p.fbaFees ? (p.fbaFees.totalFee || p.fbaFees.pickAndPackFee || 430) : 430;
 
-    const avg30Used = (p.stats.avg30 && p.stats.avg30[2] > 0) ? p.stats.avg30[2] : 0;
-    const priceTrend = (avg30Used > 0 && avgUsed > 0) ? Math.round(((avg30Used - avgUsed) / avgUsed) * 1000) / 10 : null;
-    const priceRecovering = (avg30Used > 0 && minUsed > 0) ? (minUsed >= avg30Used) : false;
+    // 🌟 buybox平均＝カートを取った中古の90日平均。実際に売れている値段に近い。
+    const bbAvg90 = (p.stats.avg90 && p.stats.avg90[32] > 0) ? p.stats.avg90[32] : 0;
+    const trendNow = calcTrendLabelFromStats(p.stats);
+    const solidNow = solidFromStats(p.stats, p.csv);
 
     const drops = p.stats.salesRankDrops90 || 0;
     const drops30 = p.stats.salesRankDrops30 || 0;
@@ -481,15 +707,18 @@ async function runResearch() {
     else if (score === 2) rank = "C";
     else if (score === 1) rank = "D";
 
-    const SR_OUT_OF_STOCK_PERCENT = 80, SR_MIN_DROPS90 = 3, SR_MAX_USED_OFFERS = 2, SR_MIN_CHEAPER_PERCENT = 15;
+    // 🌟【SR / SSR】有料版・サーバーとまったく同じ判定。数字を変えると答えがズレる。
+    //   値段の比較は「中古の90日平均」で行う。今の最安で比べると、
+    //   中古が0人の本命が必ず落ちてしまうため。
+    const SR_OUT_OF_STOCK_PERCENT = 70, SR_MIN_DROPS90 = 3, SR_MAX_USED_OFFERS = 1, SR_MIN_CHEAPER_PERCENT = 15;
     const oos = (p.stats.outOfStockPercentage90 && typeof p.stats.outOfStockPercentage90[2] === "number" && p.stats.outOfStockPercentage90[2] >= 0) ? p.stats.outOfStockPercentage90[2] : -1;
     const newOffers = (p.stats.current && p.stats.current[11] > 0) ? p.stats.current[11] : 0;
     const newPrice = (p.stats.current && p.stats.current[1] > 0) ? p.stats.current[1] : 0;
     const hasNew = newOffers > 0 || newPrice > 0;
     const isDotted = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && usedOffers <= SR_MAX_USED_OFFERS;
-    const isRare = isDotted && (hasNew ? (minUsed > 0 && newPrice > 0 && minUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true);
-    if (isRare) rank = "SR";
-    const RANK_COLORS = { SR: "#a855f7", S: "#ff0000", A: "#ff8c00", B: "#32cd32", C: "#1e90ff", D: "#808080", E: "#808080" };
+    const isRare = isDotted && (hasNew ? (avgUsed > 0 && newPrice > 0 && avgUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true);
+    if (isRare) rank = hasNew ? "SR" : "SSR";
+    const RANK_COLORS = { SSR: "#d69e2e", SR: "#a855f7", S: "#ff0000", A: "#ff8c00", B: "#32cd32", C: "#1e90ff", D: "#808080", E: "#808080" };
     const rColor = RANK_COLORS[rank] || "#808080";
 
     // サイズ（有料版・サーバーと同じ式）
@@ -541,9 +770,10 @@ async function runResearch() {
       + '<div style="font-size:10px; color:#718096; text-align:right; margin-bottom:6px; padding-right:4px;">※Keepaの情報を元に表示しています</div>'
       + '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:12px;">'
         + '<div style="background:#ebf8ff; border:1px solid #bee3f8; padding:8px 4px; border-radius:8px; text-align:center;">'
-          + '<div style="font-size:10px; color:#2b6cb0; font-weight:bold; margin-bottom:2px;">平均(90)</div>'
-          + '<div style="font-size:13px; font-weight:bold; color:#2c5282;">¥' + (avgUsed > 0 ? avgUsed.toLocaleString() : "0") + '</div>'
-          + '<div style="font-size:10px; margin-top:2px;">' + trendLabel(priceTrend, priceRecovering) + '</div>'
+          + '<div style="font-size:10px; color:#2b6cb0; font-weight:bold; margin-bottom:2px;">buybox平均</div>'
+          + '<div style="font-size:13px; font-weight:bold; color:#2c5282;">' + (bbAvg90 > 0 ? "¥" + bbAvg90.toLocaleString() : '<span style="color:#a0aec0;">-</span>') + '</div>'
+          + '<div style="font-size:9px; color:#718096;">90日平均 ¥' + (avgUsed > 0 ? avgUsed.toLocaleString() : "0") + '</div>'
+          + '<div style="font-size:10px; margin-top:2px;">' + trendBadge(trendNow) + '</div>'
         + '</div>'
         + '<div style="background:#fff5f5; border:1px solid #fed7d7; padding:8px 4px; border-radius:8px; text-align:center;">'
           + '<div style="font-size:10px; color:#c53030; font-weight:bold; margin-bottom:2px;">中古最安</div>'
@@ -555,11 +785,12 @@ async function runResearch() {
           + (bbNote ? '<div style="font-size:9px; color:#718096; margin-top:1px;">' + bbNote + '</div>' : '')
         + '</div>'
       + '</div>'
+      + solidBand(solidNow)
       + dropsBand(drops, drops30)
       + '<div class="calc-box">'
         + '<div class="calc-row"><span>仕入れ値</span><input type="number" id="bPrice" placeholder="0"></div>'
         + '<div class="calc-row"><span>経費/送料</span><input type="number" id="ePrice" placeholder="0"></div>'
-        + '<div class="calc-row"><span>販売価格</span><input type="number" id="sPrice" value="' + minUsed + '"></div>'
+        + '<div class="calc-row"><span>販売価格</span><input type="number" id="sPrice" value="' + (bbAvg90 > 0 ? bbAvg90 : minUsed) + '"></div>'
         + '<div style="border-top:1px solid #555; margin:12px 0 8px; padding-top:8px; font-size:12px; color:#aaa;">'
           + '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>販売手数料 (' + referralFeePercent + '%)</span><span id="resComm">--</span></div>'
           + '<div style="display:flex; justify-content:space-between;"><span>FBA手数料</span><span>-¥' + fbaFee.toLocaleString() + '</span></div>'
