@@ -742,12 +742,12 @@ async function runResearch() {
     // 🌟【SR / SSR】有料版・サーバーとまったく同じ判定。数字を変えると答えがズレる。
     //   値段の比較は「中古の90日平均」で行う。今の最安で比べると、
     //   中古が0人の本命が必ず落ちてしまうため。
-    const SR_OUT_OF_STOCK_PERCENT = 70, SR_MIN_DROPS90 = 3, SR_MAX_USED_OFFERS = 1, SR_MIN_CHEAPER_PERCENT = 15;
+    const SR_OUT_OF_STOCK_PERCENT = 70, SR_MIN_DROPS90 = 3, SR_MIN_DROPS30 = 1, SR_MAX_USED_OFFERS = 1, SR_MIN_CHEAPER_PERCENT = 15;
     const oos = (p.stats.outOfStockPercentage90 && typeof p.stats.outOfStockPercentage90[2] === "number" && p.stats.outOfStockPercentage90[2] >= 0) ? p.stats.outOfStockPercentage90[2] : -1;
     const newOffers = (p.stats.current && p.stats.current[11] > 0) ? p.stats.current[11] : 0;
     const newPrice = (p.stats.current && p.stats.current[1] > 0) ? p.stats.current[1] : 0;
     const hasNew = newOffers > 0 || newPrice > 0;
-    const isDotted = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && usedOffers <= SR_MAX_USED_OFFERS;
+    const isDotted = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && drops30 >= SR_MIN_DROPS30 && usedOffers <= SR_MAX_USED_OFFERS;
     const isRare = isDotted && (hasNew ? (avgUsed > 0 && newPrice > 0 && avgUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true);
     if (isRare) rank = hasNew ? "SR" : "SSR";
     const RANK_COLORS = { SSR: "#d69e2e", SR: "#a855f7", S: "#ff0000", A: "#ff8c00", B: "#32cd32", C: "#1e90ff", D: "#808080", E: "#808080" };
