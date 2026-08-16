@@ -747,9 +747,14 @@ async function runResearch() {
     const newOffers = (p.stats.current && p.stats.current[11] > 0) ? p.stats.current[11] : 0;
     const newPrice = (p.stats.current && p.stats.current[1] > 0) ? p.stats.current[1] : 0;
     const hasNew = newOffers > 0 || newPrice > 0;
-    const isDotted = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && drops30 >= SR_MIN_DROPS30 && usedOffers <= SR_MAX_USED_OFFERS;
-    const isRare = isDotted && (hasNew ? (avgUsed > 0 && newPrice > 0 && avgUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true);
+    const isDottedBase = oos >= SR_OUT_OF_STOCK_PERCENT && drops >= SR_MIN_DROPS90 && usedOffers <= SR_MAX_USED_OFFERS;
+    const isDotted = isDottedBase && drops30 >= SR_MIN_DROPS30;
+    const rareShape = hasNew ? (avgUsed > 0 && newPrice > 0 && avgUsed <= newPrice * (1 - SR_MIN_CHEAPER_PERCENT / 100)) : true;
+    const isRare = isDotted && rareShape;
     if (isRare) rank = hasNew ? "SR" : "SSR";
+    // 🌟【あと一歩】SRの形はできているのに、直近30日だけ動きが無いもの。ランクの横に「+」を出す。
+    const isNearRare = !isRare && isDottedBase && rareShape;
+    const rankLabel = rank + (isNearRare ? "+" : "");
     const RANK_COLORS = { SSR: "#d69e2e", SR: "#a855f7", S: "#ff0000", A: "#ff8c00", B: "#32cd32", C: "#1e90ff", D: "#808080", E: "#808080" };
     const rColor = RANK_COLORS[rank] || "#808080";
 
@@ -786,7 +791,7 @@ async function runResearch() {
             + '<i class="far fa-copy" id="copyIcon" style="color:#a0aec0; font-size:12px; margin-left:4px;"></i>'
           + '</div>'
           + '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">'
-            + '<span class="badge" style="border:1px solid ' + rColor + '; color:' + rColor + '; padding:3px 8px;">' + rank + 'ランク</span>'
+            + '<span class="badge" style="border:1px solid ' + rColor + '; color:' + rColor + '; padding:3px 8px;">' + rankLabel + 'ランク</span>'
             + '<span class="badge" style="background:' + (sizeTier === "大型" ? "#e53e3e" : "#07A27B") + '; color:#fff; padding:3px 8px;">' + sizeTier + '</span>'
             + '<a href="https://sellercentral.amazon.co.jp/product-search/search?q=' + asin + '" target="_blank" style="background:#e53e3e; color:#fff; text-decoration:none; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:bold;">規制確認</a>'
             + '<button onclick="showUpsell(\'history\')" style="background:#4285f4; color:#fff; border:none; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:10px; cursor:pointer;"><i class="fas fa-history"></i> 販売履歴リサーチ</button>'
@@ -856,7 +861,7 @@ async function runResearch() {
     updateCalc();
 
     document.getElementById("historyArea").style.display = "block";
-    saveHistory({ kw: asin, title: productTitle, img: imageUrl, rank: rank, rColor: rColor, used: usedOffers });
+    saveHistory({ kw: asin, title: productTitle, img: imageUrl, rank: rankLabel, rColor: rColor, used: usedOffers });
     bumpTotalAndMaybeNudge();
 
   } catch (err) {
