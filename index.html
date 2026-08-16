@@ -392,11 +392,16 @@ function calcSolidPrice(csv) {
 }
 
 // 相場が鉄板値の下を通り抜けた商品は、もう使えない古い値段なので捨てる。
+//   比べる相手は「今の中古最安」。30日平均だと、じわじわ下がっている商品で
+//   平均が遅れて付いてくるため、死んだ鉄板値が残ってしまう。
+//   ただし今日がちょうど谷の最中のときに正しい鉄板値まで消さないよう、
+//   谷を束ねるのに使っている幅(SOLID_BAND)ぶんだけ余裕を持たせる。
 function solidFromStats(stats, csv) {
   const solid = calcSolidPrice(csv);
   if (!solid) return null;
-  const avg30Used = (stats && Array.isArray(stats.avg30) && stats.avg30[2] > 0) ? stats.avg30[2] : 0;
-  if (avg30Used > 0 && solid.price > avg30Used) return null;
+  const nowUsed = (stats && Array.isArray(stats.current) && stats.current[2] > 0) ? stats.current[2] : 0;
+  const band = Math.max(SOLID_BAND_YEN, Math.round(solid.price * SOLID_BAND_PERCENT / 100));
+  if (nowUsed > 0 && solid.price > nowUsed + band) return null;
   return solid;
 }
 
