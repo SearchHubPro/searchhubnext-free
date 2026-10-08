@@ -684,8 +684,8 @@ async function runResearch() {
     } else if (p.imagesCSV) imgRaw = p.imagesCSV.split(",")[0];
     const imageUrl = imgRaw ? (String(imgRaw).startsWith("http") ? imgRaw : "https://images-na.ssl-images-amazon.com/images/I/" + imgRaw) : "";
 
-    const avgUsed = (p.stats.avg90 && p.stats.avg90[2] !== -1) ? p.stats.avg90[2] : 0;
-    const minUsed = (p.stats.current && p.stats.current[2] !== -1) ? p.stats.current[2] : 0;
+    const avgUsed = (p.stats.avg90 && typeof p.stats.avg90[2] === 'number' && p.stats.avg90[2] > 0) ? p.stats.avg90[2] : 0;
+    const minUsed = (p.stats.current && typeof p.stats.current[2] === 'number' && p.stats.current[2] > 0) ? p.stats.current[2] : 0;
     const referralFeePercent = p.referralFeePercentage || 10;
 
     let bbUsedPrice = 0;
@@ -708,8 +708,8 @@ async function runResearch() {
       else { bbValText = "カート無し"; }
     }
 
-    const usedOffers = (p.stats.current && p.stats.current[12] !== -1) ? p.stats.current[12] : 0;
-    const usedCountAvg90 = (p.stats.avg90 && p.stats.avg90[12] !== -1) ? p.stats.avg90[12] : usedOffers;
+    const usedOffers = (p.stats.current && typeof p.stats.current[12] === 'number' && p.stats.current[12] > 0) ? p.stats.current[12] : 0;
+    const usedCountAvg90 = ((p.stats.avg90 && typeof p.stats.avg90[12] === 'number' && p.stats.avg90[12] > 0) ? p.stats.avg90[12] : 0) || usedOffers;
     const fbaFee = p.fbaFees ? (p.fbaFees.totalFee || p.fbaFees.pickAndPackFee || 430) : 430;
 
     // 🌟 buybox平均＝カートを取った中古の90日平均。実際に売れている値段に近い。
